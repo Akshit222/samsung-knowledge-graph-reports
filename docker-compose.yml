@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+
+  backend:
+    image: abhay2kumar/nl2sql-backend
+    container_name: fastapi_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: always
+
+  frontend:
+    image: abhay2kumar/nl2sql-frontend
+    container_name: streamlit_frontend
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: always
