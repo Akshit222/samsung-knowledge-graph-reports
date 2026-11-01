@@ -1,42 +1,69 @@
-# Query Based Report
+# Context-Aware SQL Analytics — Intelligent Ingestion, Hybrid Retrieval & Semantic Knowledge Graph
 
-*Transform your Excel data into intelligent, queryable insights*
-
----
-## Complete Project Demo and Explanation
-![mqdefault](https://github.ecodesamsung.com/SRIB-PRISM/QueryBasedReports/assets/38880/4db00dd3-6754-4ba0-99c6-798ecf3d0e3a)
-
-https://youtu.be/5Ied6-Ck5FE
+*Transform unstructured and tabular enterprise data into intelligent, queryable insights with Natural Language to SQL, Vector Search, and Knowledge Graphs.*
 
 ---
 
-## What This Does?
+## 📺 Complete Project Demo
+![Project Demo](https://github.ecodesamsung.com/SRIB-PRISM/QueryBasedReports/assets/38880/4db00dd3-6754-4ba0-99c6-798ecf3d0e3a)
 
-Ever wished you could just ask your spreadsheets questions and get smart answers back? That's exactly what this project does. Drop in an Excel, PDF amd the data will be stored dynamically in the relevant table and column and Ask any query and right data for the answer will be retrieved from the DB . 
-
----
-
-## How It Works
-
-**1. Data Ingestion** → Your Excel files get processed and stored in a proper SQL database. 
-  So any Data in Pdf or Excel (csv , xlsxx etc) can be interpretted and stored in their relevant tables in that database matching the content and primary identifiers and then actual data can be stored based on similairty with the existing column of the table or new      column. 
-  
-**2. AI Analysis** → Ask questions in plain English and get intelligent answers about your data
-  So any NLP query sent by the user , first relevant tables are found by the ChromaDB vectordb based similarity matching then inside the relevant tables the relevant columns for the query are checked , after which the sql query is formed to retireve the result data      which then can also be converted back to NLP 
-
-Think of it as giving your spreadsheets a brain.
+Watch the walkthrough on YouTube: **[Demo & Explanation Video](https://youtu.be/5Ied6-Ck5FE)**
 
 ---
 
-## Project Workflow
-<img width="1393" alt="image" src="https://github.ecodesamsung.com/SRIB-PRISM/QueryBasedReports/assets/38888/05c1005e-b915-4501-8275-b33b5f08e141">
+## 🌟 What This System Does
 
-## User Query Flow
-<img width="715" alt="image" src="https://github.ecodesamsung.com/SRIB-PRISM/QueryBasedReports/assets/38888/ef691bd8-ca86-44e7-ba7f-e80ebaa4c871">
+Ask your databases and spreadsheets complex business questions in plain English and receive accurate, executable SQL, tabular answers, and executive summaries.
+
+1. **Intelligent Ingestion** — Drop in Excel (`.xlsx`, `.xls`), CSV, or PDF documents. The system analyzes schemas, deduplicates entities, creates or appends SQL tables dynamically, and indexes schema metadata.
+2. **Semantic Knowledge Graph Layer (Neo4j)** — Automatically extracts business entities, cross-table relationships, and document provenance into a graph database with W3C RDF/OWL semantic standards.
+3. **Hybrid Retrieval (ChromaDB + Neo4j)** — Combines dense vector similarity search (ChromaDB embeddings) with structured graph traversal (Neo4j) to select the right tables and columns for ambiguous prompts.
+4. **Context-Aware NL2SQL Generation** — Formulates high-precision MySQL queries using Google Gemini with dynamic few-shot examples and graph hints.
+5. **Interactive Streamlit Explorer** — Features an interactive graph visualizer, SQL workbench, and AI-driven narrative summarizer.
 
 ---
 
-## Project Structure
+## 🏗️ System Architecture & Workflow
+
+```
+                                      ┌─────────────────────────────────┐
+                                      │   User Query / Raw Documents    │
+                                      └────────────────┬────────────────┘
+                                                       │
+                     ┌─────────────────────────────────┴─────────────────────────────────┐
+                     ▼                                                                   ▼
+       [Intelligent File Ingestion]                                        [Natural Language Query]
+                     │                                                                   │
+          ┌──────────┴──────────┐                                                        ▼
+          ▼                     ▼                                           Extract Question Entities
+   MySQL Database       Entity Extraction                                                │
+   (Structured Tables)   & Relationship Mapping                                          │
+          ▲                     │                                                        ▼
+          │                     ▼                                              [Hybrid Retrieval]
+          │             Neo4j Knowledge Graph                             ┌──────────────┴──────────────┐
+          │             - Nodes: Document, Entity,                        ▼                             ▼
+          │               DatabaseTable, DatabaseColumn              ChromaDB (Vectors)       Neo4j (Knowledge Graph)
+          │             - Edges: CONTAINS, RELATED_TO,              [Schema Embeddings]       [Entity & Rel Hints]
+          │               REFERENCES, CONTAINS_COLUMN                     └──────────────┬──────────────┘
+          │                                                                              │
+          │                                                                              ▼
+          │                                                                  Assemble Prompt Context
+          │                                                                              │
+          │                                                                              ▼
+          │                                                                   Google Gemini (LLM)
+          │                                                                              │
+          │                                                                              ▼
+          │                                                                   Generate Precision SQL
+          │                                                                              │
+          └─────────────────────────────────────────────────────────────────────── Execute Query
+                                                                                         │
+                                                                                         ▼
+                                                                             Interactive Results & Summary
+```
+
+---
+
+## 📁 Project Structure
 
 ```
 QueryBasedReports/
@@ -44,336 +71,240 @@ QueryBasedReports/
 ├── backend/
 │   ├── app/
 │   │   ├── models/
-│   │   │   └── query.py                    # Data models
+│   │   │   └── query.py                    # Pydantic models for queries & requests
 │   │   ├── routes/
-│   │   │   ├── db_meta.py                  # Database metadata endpoints
-│   │   │   ├── debug_chroma.py             # ChromaDB debugging
-│   │   │   ├── execute_query.py            # Query execution
-│   │   │   ├── intelligent_ingest.py       # Smart data ingestion
-│   │   │   ├── nl2sql.py                   # Natural language to SQL
-│   │   │   ├── refresh_schema.py           # Schema refresh
-│   │   │   ├── summarize.py                # Result summarization
+│   │   │   ├── db_meta.py                  # Database metadata & SHOW TABLES endpoints
+│   │   │   ├── debug_chroma.py             # ChromaDB vector store diagnostics
+│   │   │   ├── execute_query.py            # SQL query execution engine
+│   │   │   ├── graph.py                    # Knowledge Graph API endpoints
+│   │   │   ├── intelligent_ingest.py       # Smart Excel/CSV/PDF ingestion endpoint
+│   │   │   ├── nl2sql.py                   # Natural Language to SQL generation
+│   │   │   ├── refresh_schema.py           # Schema cache & vector embedding refresh
+│   │   │   ├── summarize.py                # AI-driven query result summarization
 │   │   │   └── upload_excel.py             # File upload handling
 │   │   ├── services/
-│   │   │   ├── intelligent_ingestion_service.py
-│   │   │   ├── nl2sql_service.py
-│   │   │   ├── summarize_service.py
-│   │   │   └── upload_service.py
+│   │   │   ├── intelligent_ingestion_service.py # Ingestion & Graph extraction hooks
+│   │   │   ├── nl2sql_service.py           # Hybrid vector+graph NL2SQL engine
+│   │   │   ├── summarize_service.py        # Executive summary generator
+│   │   │   └── upload_service.py           # Excel parser service
 │   │   ├── utils/
-│   │   │   ├── chroma_utils.py             # Vector DB utilities
-│   │   │   ├── db_utils.py                 # Database utilities
-│   │   │   ├── db.py                       # Database connection
-│   │   │   ├── fewshot_utils.py            # Few-shot learning
-│   │   │   └── main.py                     # Utility main
-│   │   └── main.py                         # FastAPI application
+│   │   │   ├── chroma_utils.py             # ChromaDB schema vector embeddings
+│   │   │   ├── db_utils.py                 # SQLAlchemy schema inspector & cache
+│   │   │   ├── db.py                       # MySQL database connection pool
+│   │   │   ├── entity_extractor.py         # Business entity & relationship extractor
+│   │   │   ├── fewshot_utils.py            # Dynamic few-shot prompt manager
+│   │   │   ├── graph_service.py            # Neo4j Knowledge Graph service
+│   │   │   └── main.py                     # Utility helpers
+│   │   └── main.py                         # FastAPI application entry point
 │   └── requirements.txt
 │
 ├── frontend/
 │   ├── components/
-│   │   ├── data_ingestion.py               # Data ingestion UI
-│   │   ├── file_upload.py                  # File upload component
-│   │   ├── followup.py                     # Follow-up queries
-│   │   ├── nl_query.py                     # Natural language query UI
-│   │   ├── result_viewer.py                # Results display
-│   │   ├── sidebar.py                      # Sidebar navigation
-│   │   └── sql_editor.py                   # SQL editor component
+│   │   ├── data_ingestion.py               # Ingestion UI with W3C RDF/OWL visualizer
+│   │   ├── file_upload.py                  # File upload widget
+│   │   ├── followup.py                     # Conversational follow-up query UI
+│   │   ├── knowledge_graph.py              # Interactive Plotly Knowledge Graph Explorer
+│   │   ├── nl_query.py                     # Natural language query input component
+│   │   ├── result_viewer.py                # SQL result table & AI summary viewer
+│   │   ├── sidebar.py                      # Database & table selector sidebar
+│   │   └── sql_editor.py                   # Interactive SQL code editor & runner
 │   │
 │   ├── utils/
-│   │   ├── api.py                          # API client
-│   │   └── app.py                          # App utilities
+│   │   ├── api.py                          # Frontend HTTP client (including Graph API)
+│   │   ├── app.py                          # Streamlit application helpers
+│   │   └── semantic_engine.py              # W3C OWL/RDF & R2RML semantic engine
 │   │
-│   └── app.py                              # Main Streamlit app
+│   └── app.py                              # Main Streamlit dashboard
 │
-├── Testing Dataset/
-│   └── Main_Test_Dataset/
-│       ├── chrome/                         # Chrome test data
-│       ├── teams/                          # Teams test data
-│       └── whatsapp/                       # WhatsApp test data
-│
-├── docker-compose.yml                      # Docker orchestration
-├── .env.example                            # Environment variables template
-├── README.md                               # This file
-└── requirements.txt                        # Python dependencies
-```
----
-
-## Installation
-
-### Prerequisites
-
-- Docker & Docker Compose
-- Python 3.10+
-- MySQL
-- Gemini API Key
-
-# Docker Setup and Usage Guide
----
-
-# Running the Project (For Users)
-
-* docker-compose.yml
-* .env file
-
----
-
-# Step 1 — Create Project Folder
-
-```
-mkdir nl2sql
-cd nl2sql
+├── Testing Dataset/                        # Sample data for tests (Chrome, Teams, WhatsApp)
+├── docker-compose.yml                      # Containerized orchestration
+├── .env.example                            # Template environment variables
+├── requirements.txt                        # Master Python dependencies
+└── README.md                               # Project documentation
 ```
 
 ---
 
-# Step 2 — Create `.env` File
+## ⚙️ Installation & Setup Guide
 
-Create `.env` file:
+### 1. Prerequisites
+- **Python 3.10+**
+- **MySQL Server** (local or remote)
+- **Docker Desktop** (optional, recommended for Neo4j)
+- **Google Gemini API Key** ([Get free key here](https://aistudio.google.com/))
 
-```
+---
 
-DB_USER = ""
-DB_PASS = ""  
-DB_HOST = "host.docker.internal"
-DB_PORT = ""
-DB_NAME = ""
+### 2. Configure Environment (`.env`)
+Copy `.env.example` to create your `.env` in the project root:
 
-GEMINI_API_KEY=your_gemini_api_key
+```ini
+# MySQL Database Credentials
+DB_USER="root"
+DB_PASS="your_mysql_password"
+DB_HOST="localhost"
+DB_PORT="3306"
+DB_NAME="file2sql"
+
+# Google Gemini API
+GOOGLE_API_KEY="AIzaSy..."
+
+# Neo4j Graph Database (Semantic Knowledge Graph)
+# Optional: If omitted, the app degrades gracefully with full NL2SQL functionality
+NEO4J_URI="bolt://localhost:7687"
+NEO4J_USER="neo4j"
+NEO4J_PASSWORD="password123"
 ```
 
 ---
 
-# Step 3 — Create docker-compose.yml
+### 3. Start Neo4j Graph Database (Docker)
+Run Neo4j with a single command:
 
+```bash
+docker run -d --name neo4j-kg -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password123 neo4j:latest
 ```
-version: "3.9"
+- **Neo4j Browser UI**: [http://localhost:7474](http://localhost:7474) (Username: `neo4j`, Password: `password123`)
+- **Bolt Port**: `7687`
 
-services:
+> **Note on Graceful Degradation:** If Neo4j is offline or unconfigured, the application runs normally in fallback mode. Graph queries are skipped without causing crashes.
 
-  backend:
-    image: abhay2kumar/nl2sql-backend
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    restart: always
+---
 
-  frontend:
-    image: abhay2kumar/nl2sql-frontend
-    ports:
-      - "8501:8501"
-    env_file:
-      - .env
-    environment:
-      - BACKEND_URL=http://backend:8000
-    depends_on:
-      - backend
-    restart: always
+### 4. Install Python Dependencies
+Set up and activate a virtual environment:
+
+```powershell
+# Create venv
+python -m venv venv
+
+# Activate venv (Windows PowerShell)
+.\venv\Scripts\Activate.ps1
+
+# Activate venv (macOS/Linux)
+# source venv/bin/activate
+
+# Install requirements
+pip install -r requirements.txt
 ```
 
 ---
 
-# Step 4 — Start Application
+### 5. Start the Application
 
+#### Start Backend (Terminal 1)
+```powershell
+.\venv\Scripts\Activate.ps1
+cd backend
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
-docker-compose up
-```
+- Swagger API Docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- Health Check: [http://127.0.0.1:8000/api/graph/status](http://127.0.0.1:8000/api/graph/status)
 
-Docker will automatically download the images from Docker Hub.
+#### Start Frontend (Terminal 2)
+```powershell
+.\venv\Scripts\Activate.ps1
+streamlit run frontend/app.py
+```
+- Web Application: [http://localhost:8501](http://localhost:8501)
 
 ---
 
-# Step 5 — Access Application
+## 🧪 Step-by-Step Testing Guide
 
-Frontend:
+Follow these steps to test every capability of the application:
 
-```
-http://localhost:8501
-```
-
-Backend:
-
-```
-http://localhost:8000
-```
-
-Health Check:
-
-```
-http://localhost:8000/
-```
+### Step 1: Verify Knowledge Graph Status
+1. Open [http://localhost:8501](http://localhost:8501) in your browser.
+2. In the left sidebar radio button, click **Knowledge Graph**.
+3. Confirm the status header displays:
+   > 🟢 **Knowledge Graph Engine Active: Neo4j connected ✅**
 
 ---
 
-# Step 6 — Stop Application
-
-```
-docker-compose down
-```
+### Step 2: Synchronize Database Schema into Graph Nodes
+1. In the **Knowledge Graph** page, select your database (e.g. `file2sql`) from the dropdown.
+2. Click **"🔄 Sync DB Schema to Graph"**.
+3. In the **Graph Visualization** tab:
+   - Tables (`DatabaseTable` nodes in Cyan) and columns (`DatabaseColumn` nodes in Slate) will be displayed.
+   - Use the **Filter by Node Type** dropdown or drag nodes around the force-directed canvas.
+   - Inspect attributes of any node in the **Node Details & Attribute Inspector**.
+4. Check the **Table Relationships & Schema Graph** tab to review detected foreign keys.
 
 ---
 
-# Part 3 — Alternative: Run Without docker-compose
+### Step 3: Ingest a Dataset (Excel, CSV, or PDF)
+1. In the sidebar radio, switch to **Ingest Data**.
+2. Select your target database and upload a file from `Testing Dataset/` or your own spreadsheets.
+3. Click **"Ingest File"**.
+4. **What happens under the hood:**
+   - Table schema is created or merged into MySQL.
+   - Embeddings are indexed in ChromaDB.
+   - A `Document` node is created in Neo4j.
+   - Business entities (e.g., categories, departments, vendors) and row relationships are extracted and linked to the document and tables.
+   - W3C RDF Triples and OWL Ontologies are generated in the UI.
 
-Backend:
-
-```
-docker run -d -p 8000:8000 --env-file .env abhay2kumar/nl2sql-backend
-```
-
-Frontend:
-
-```
-docker run -d -p 8501:8501 --env-file .env -e BACKEND_URL=http://host.docker.internal:8000 abhay2kumar/nl2sql-frontend
-```
 ---
 
-### Setting up the project
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.ecodesamsung.com/SRIB-PRISM/QueryBasedReports.git
-   cd QueryBasedReports
+### Step 4: Test Hybrid Retrieval with Natural Language Queries
+1. In the sidebar radio, click **Main Dashboard**.
+2. Select your database from the sidebar.
+3. In the query box, enter a natural language question, for example:
+   ```text
+   "Show total sales by customer name in 2024 order by highest amount"
    ```
-
-2. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` with your configuration:
-   ```env
-   # Database Configuration
-   DB_HOST=localhost
-   DB_PORT=3306
-   DB_NAME=query_reports
-   DB_USER=root
-   DB_PASS=your_password
-   
-   # AI Configuration
-   GEMINI_API_KEY=your_key_here
-   ```
-
-3. **Install Python dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Set up the database**
-   ```bash
-   # Create database
-   mysql -u root -p -e "CREATE DATABASE query_reports;"
-   ```
-5. **Set up Virtual Environment**
-   ```bash
-   python3.10 -m venv venv
-   # Activate the environment
-   # On Windows (PowerShell / CMD):
-   venv\Scripts\activate
-   # On macOS / Linux:
-   source venv/bin/activate
-
-5. **Run the backend**
-   ```bash
-   cd backend
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-
-6. **Run the frontend**
-   ```bash
-   cd frontend
-   streamlit run app.py
-   ```
+4. Click **"Generate SQL"**.
+5. Observe the execution flow:
+   - **Entity Extraction**: Keywords (`sales`, `customer name`, `2024`) are extracted.
+   - **Graph Traversal**: Related table and column nodes are pulled from Neo4j.
+   - **ChromaDB**: Top matching schema vectors are retrieved.
+   - **Prompt Fusion**: Both context hints are sent to Gemini.
+   - **SQL Execution**: The query executes against MySQL, displaying the interactive table and AI-generated summary.
 
 ---
 
-## Usage
-
-### 1. Upload Data Files
-
-Navigate to the frontend UI and upload your data files:
-
-- **Supported formats:** Excel (.xlsx, .xls), CSV, PDF, PPT, Images, Text files
-- Files are automatically processed and stored in SQL tables
-- Schema is extracted and indexed for intelligent querying
-
-### 2. Query Your Data in Natural Language
-
-Simply type questions in plain English:
-
-```
-"Show me sales for Q3"
-"List all employees who joined after 2021"
-"Top 10 products by revenue last month"
-"Find orders where amount > 5000 and status = pending"
-"What is the average salary by department?"
-```
-
-### 3. View Results
-
-- **Tables:** Clean, formatted data tables
-- **Charts:** Visual representations of data
-- **Summaries:** AI-generated insights
-- **SQL Editor:** View and edit generated SQL (advanced users)
+### Step 5: Test Semantic Question Subgraph Extraction
+1. Return to the **Knowledge Graph** tab and switch to the **"🔍 Semantic Search & Question Answering"** tab.
+2. Enter any hypothetical query:
+   ```text
+   "Which vendors deliver high-priority orders to California?"
+   ```
+3. Click **"🚀 Analyze Entities & Retrieve Subgraph"**.
+4. The system will visualize the exact subgraph (nodes and edges) retrieved and show the YAML context injected into the NL2SQL engine.
 
 ---
 
-## Technologies Used
+## 🔌 API Endpoints Reference
 
-### Backend
-- **FastAPI** - Modern, high-performance web framework
-- **SQLAlchemy** - SQL toolkit and ORM
-- **MySQL / PostgreSQL** - Relational database
-- **ChromaDB** - Vector database for embeddings
-- **HuggingFace Embedding Model** - Semantic search and matching
-- **Gemini LLM** - Natural language understanding
-
-### Frontend
-- **Streamlit** - Interactive Python web interface
-- **REST API Integration** - Seamless backend communication
-
-### Infrastructure
-- **Docker** - Containerization
-- **Docker Compose** - Multi-container orchestration
-
----
-
-## Documentation
-
-### API Endpoints
-
-<details>
-<summary>View available endpoints</summary>
-
-#### Data Ingestion
-- `POST /upload/excel` - Upload and process Excel/CSV files
-- `POST /ingest/intelligent` - Intelligent data ingestion
-
-#### Querying
-- `POST /nl2sql` - Convert natural language to SQL
-- `POST /execute` - Execute SQL query
-- `POST /summarize` - Generate result summary
-
-#### Schema Management
-- `GET /db/meta` - Get database metadata
-- `POST /refresh/schema` - Refresh schema embeddings
-
-#### Debugging
-- `GET /debug/chroma` - Debug ChromaDB collections
-
-</details>
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/` | List available MySQL databases |
+| `GET` | `/api/{db_name}` | List tables in database |
+| `POST` | `/api/ingest/` | Intelligent Excel/CSV/PDF file ingestion |
+| `POST` | `/api/nl2sql/` | Generate SQL from natural language (with Graph context) |
+| `POST` | `/api/execute/` | Execute SQL query on database |
+| `POST` | `/api/summarize/` | Generate natural language summary of query results |
+| `POST` | `/api/refresh/` | Refresh schema cache, ChromaDB embeddings, and Neo4j graph |
+| `GET` | `/api/graph/status` | Neo4j connectivity status |
+| `GET` | `/api/graph/` | Sampled graph nodes and edges for visualization |
+| `GET` | `/api/graph/entities/{id}/neighbors` | Multi-hop entity neighborhood traversal |
+| `GET` | `/api/graph/search` | Search entities by substring |
+| `POST` | `/api/graph/semantic-search` | Entity extraction and subgraph retrieval from natural text |
+| `GET` | `/api/graph/tables/{db_name}/relationships` | Table foreign-key relationships |
+| `POST` | `/api/graph/sync-schema/{db_name}` | Manual relational schema-to-graph synchronization |
 
 ---
 
-##  Troubleshooting
+## 🛠️ Troubleshooting FAQ
 
-| Issue | Solution |
-|-------|----------|
-| Database not connecting | Verify `.env` configuration and ensure database is running |
-| Embeddings not loading | Install required model dependencies: `pip install sentence-transformers` |
-| Incorrect AI responses | Refresh schema and clear few-shot cache |
-| File ingestion errors | Ensure files have proper headers and are not password-protected |
-| Docker issues | Run `docker-compose down -v` then restart with `docker-compose up --build` |
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| **"Graph Service Offline or Not Configured"** | Neo4j container not running or `.env` missing credentials | Run `docker start neo4j-kg` and ensure `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` are set in `.env`. |
+| **"Cannot connect to backend"** in frontend | FastAPI server is not running | Start backend with `cd backend; uvicorn main:app --reload`. |
+| **MySQL Access Denied (1045)** | Incorrect database credentials | Check `DB_USER` and `DB_PASS` in `.env`. |
+| **"No few-shot examples available"** | ChromaDB collections not initialized | Ingest a file or click "Refresh Schema" in the sidebar. |
+| **Gemini API Rate Limit / Error** | Missing or exhausted Gemini key | Verify `GOOGLE_API_KEY` in `.env` is valid and active. |
 
-*Built for intelligent data analysis and insights.*
+---
 
-
+*Built with FastAPI, Streamlit, Neo4j, ChromaDB, and Google Gemini.*

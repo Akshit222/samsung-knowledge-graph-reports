@@ -374,6 +374,16 @@ Input Preview:\n{data_preview}
                 "columns": {col: f"Data column: {col}" for col in cols},
                 "rows": [row._asdict() if hasattr(row, '_asdict') else dict(zip(df.columns, r)) for r in df.itertuples(index=False)]}
 
+def chunk_text_words(text: str, chunk_size: int = 300, overlap: int = 50) -> list[str]:
+    words = text.split()
+    chunks = []
+    if not words:
+        return chunks
+    step = max(1, chunk_size - overlap)
+    for i in range(0, len(words), step):
+        chunks.append(" ".join(words[i:i + chunk_size]))
+    return chunks
+
 def analyze_pdf_with_gemini(file_path: str) -> Dict:
     try:
         text_content = ""
@@ -382,38 +392,98 @@ def analyze_pdf_with_gemini(file_path: str) -> Dict:
                 text_content += page.extract_text() or ""
         if not text_content.strip():
             raise Exception("No text content found in PDF")
-        file_type = classify_file_type(text_content)
+            
+        file_type = classify_file_type(text_content[:2000])
         preferred_cols = TYPE_COLUMN_RECOMMENDATIONS.get(file_type, [])
         pc_str = ', '.join(preferred_cols) if preferred_cols else '(none)'
-        prompt = f"""
-You are an expert information extractor. The data type is: {file_type.upper()}.
-Preferred columns for this file type are: [{pc_str}] — USE these columns IF the content matches, else create a new abstract noun column. These columns should be prioritized if meaning fits.
-1. Find the best possible primary identifier for row-blocks.
-2. For each block, assign columns ONLY as abstract nouns.
-3. Table name must be a proper noun or entity title.
-NO commentary.
-Strict JSON only:
+        
+        chunks = chunk_text_words(text_content, chunk_size=300, overlap=50)
+        
+        all_rows = []
+        known_columns = []
+        table_name = sanitize_name(os.path.basename(file_path).replace(".pdf", ""))
+        primary_identifier = None
+        
+        print(f"\n[PDF INGESTION] Starting chunk processing. Total chunks to process: {len(chunks)}")
+        
+        for i, chunk in enumerate(chunks):
+            print(f"  -> Processing Chunk [{i+1}/{len(chunks)}] (Length: {len(chunk.split())} words)")
+            cols_context = f"Known columns established from previous sections: {known_columns}" if known_columns else "No specific columns established yet."
+            
+            prompt = f"""
+You are an expert information extractor processing chunk {i+1} of {len(chunks)} of a {file_type.upper()} document.
+Preferred semantic columns for this type are: [{pc_str}].
+{cols_context}
+
+Instructions:
+1. Extract the structured data from the Input Text below.
+2. If this is the first chunk, establish a primary entity identifier. If earlier chunks established it, keep it.
+3. Organize the data into rows. Use the 'Known columns' if they semantically fit, otherwise invent new abstract nouns (like 'organization', 'amount', 'date', never 'column1').
+4. If a row seems cut-off (due to text chunking), extract as much as possible.
+5. Return JSON ONLY matching this format:
 {{{{
-  "table_name": "...",
-  "primary_identifier": "...",
-  "rows": [{{{{...}}}}, ...]
+  "table_name": "best descriptive noun for the data entity (e.g. employee_records)",
+  "primary_identifier": "the main tracking column (e.g. employee_id)",
+  "parsed_columns": ["col_1", "col_2"],
+  "rows": [{{{{ "col_1": "val", "col_2": "val" }}}}, ...]
 }}}}
-Input Text (up to 5000 chars):\n{text_content[:5000]}
+NO commentary. Strict JSON ONLY.
+
+Input Text (Chunk {i+1}):
+{chunk}
 """
-        response = llm.invoke(prompt)
-        content = response.content.strip()
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        if json_match:
             try:
-                result = json.loads(json_match.group())
-                # Require identifier and at least one abstract-noun column
-                if result.get("primary_identifier") and any(k for row in result.get("rows",[]) for k in row if k not in [result['primary_identifier'], 'description', 'column1','value','field']):
-                    return result
+                response = llm.invoke(prompt)
+                content = response.content.strip()
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                    chunk_rows = result.get("rows", [])
+                    chunk_cols = result.get("parsed_columns", [])
+                    
+                    if chunk_rows:
+                        all_rows.extend(chunk_rows)
+                        print(f"     -> Successfully extracted {len(chunk_rows)} rows from Chunk {i+1}.")
+                        print(f"     -> Known schema updated to: {known_columns}")
+                        
+                    for c in chunk_cols:
+                        if c not in known_columns and c not in ["description", "value", "column1", "field"]:
+                            known_columns.append(c)
+                            
+                    if result.get("primary_identifier") and not primary_identifier:
+                        primary_identifier = result.get("primary_identifier")
+                        
+                    if result.get("table_name") and table_name == sanitize_name(os.path.basename(file_path).replace(".pdf", "")):
+                        table_name = sanitize_name(result.get("table_name"))
             except Exception as e:
-                print("[Gemini PDF (abstract noun) RAW OUTPUT]:", content)
-                print("[Gemini PDF] PARSE ERROR:", e)
-        # Fallback
-        try:
+                print(f"[Gemini PDF Chunk {i+1}] PARSE ERROR:", e)
+                continue
+                
+        print(f"\n[PDF INGESTION] Finished scanning all chunks. Total raw rows extracted = {len(all_rows)}")
+        print(f"[PDF INGESTION] Starting deduplication phase using primary identifier: '{primary_identifier}'")
+        
+        # Deduplication
+        deduped_rows = []
+        seen_ids = set()
+        for row in all_rows:
+            # deduplicate by primary identifier or full string representation
+            pid_val = row.get(primary_identifier) if primary_identifier else None
+            
+            if pid_val is not None and str(pid_val).strip() != "":
+                if pid_val not in seen_ids:
+                    seen_ids.add(pid_val)
+                    deduped_rows.append(row)
+            else:
+                # No primary identifier or it's empty, use dict representation
+                row_str = str(sorted({str(k): str(v) for k, v in row.items()}.items()))
+                if row_str not in seen_ids:
+                    seen_ids.add(row_str)
+                    deduped_rows.append(row)
+
+        print(f"[PDF INGESTION] Deduplication complete! Final distinct rows: {len(deduped_rows)} (Removed {len(all_rows) - len(deduped_rows)} overlaps)")
+
+        if not deduped_rows:
+            # Fallback if no rows extracted from chunks
             tables = []
             with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
@@ -424,15 +494,19 @@ Input Text (up to 5000 chars):\n{text_content[:5000]}
                 import pandas as pd
                 df = pd.DataFrame(first_table[1:], columns=first_table[0])
                 cols = list(df.columns)
-                return {"table_name": sanitize_name(os.path.basename(file_path).replace(".pdf", "")),
+                return {"table_name": table_name,
                         "primary_identifier": cols[0] if cols else None,
                         "columns": {col: f"Data column: {col}" for col in cols},
                         "rows": [row._asdict() if hasattr(row, '_asdict') else dict(zip(df.columns, r)) for r in df.itertuples(index=False)]}
-        except Exception as e2:
-            print("[PDF literal fallback parse error]", e2)
-        return {"table_name": sanitize_name(os.path.basename(file_path).replace(".pdf", "")),
-                "primary_identifier": None, "rows": []}
-            
+            else:
+                return {"table_name": table_name, "primary_identifier": primary_identifier, "rows": []}
+
+        return {
+            "table_name": table_name,
+            "primary_identifier": primary_identifier,
+            "rows": deduped_rows
+        }
+
     except Exception as e:
         print(f"[Gemini PDF Analysis] Error: {e}")
         traceback.print_exc()
@@ -1112,13 +1186,128 @@ async def intelligent_ingest_file(file: UploadFile, db_name: str) -> Dict:
     """
     Main entry point for intelligent file ingestion.
     Routes to Excel or PDF handler based on file type.
+    After a successful ingestion, entity/relationship extraction and
+    knowledge graph upsert are run as a best-effort post-step.
     """
     file_ext = os.path.splitext(file.filename)[1].lower()
-    
+
     if file_ext in [".xlsx", ".xls", ".csv"]:
-        return await ingest_excel_file(file, db_name)
+        result = await ingest_excel_file(file, db_name)
     elif file_ext == ".pdf":
-        return await ingest_pdf_file(file, db_name)
+        result = await ingest_pdf_file(file, db_name)
     else:
         return {"status": "error", "error": f"Unsupported file type: {file_ext}"}
+
+    # ── Graph integration (best-effort, never blocks the ingestion result) ──
+    if result.get("status") == "success":
+        _run_graph_integration(result, file.filename, db_name, file_ext)
+
+    return result
+
+
+def _run_graph_integration(
+    ingestion_result: Dict,
+    filename: str,
+    db_name: str,
+    file_ext: str,
+) -> None:
+    """
+    Post-ingestion hook: extract entities/relationships and upsert into Neo4j.
+    Completely silently skipped if graph service is unavailable.
+    """
+    try:
+        from utils.graph_service import (
+            is_available, ensure_constraints,
+            upsert_document, upsert_entity, upsert_relationship,
+            sync_db_schema_to_graph,
+        )
+        from utils.entity_extractor import extract_from_dataframe, extract_from_text
+        import hashlib
+
+        if not is_available():
+            return  # Graph not configured — skip silently
+
+        ensure_constraints()
+
+        table_name = ingestion_result.get("table_name", "unknown")
+        doc_id = hashlib.sha256(f"{db_name}::{filename}".encode()).hexdigest()[:16]
+
+        # Upsert document node
+        upsert_document(
+            doc_id=doc_id,
+            name=filename,
+            source_db=db_name,
+            source_table=table_name,
+            file_type=file_ext.lstrip("."),
+        )
+
+        # Extract entities based on file type
+        if file_ext in (".xlsx", ".xls", ".csv"):
+            try:
+                engine = get_engine_for_db(db_name)
+                df = pd.read_sql_table(table_name, con=engine)
+                entities, relations = extract_from_dataframe(
+                    df, table_name=table_name, db_name=db_name, doc_id=doc_id
+                )
+            except Exception as exc:
+                print(f"[GraphIntegration] DataFrame extraction failed: {exc}")
+                entities, relations = [], []
+        else:
+            # For PDF: use the stored text (not available here — skip entity extraction)
+            entities, relations = [], []
+
+        # Upsert entities
+        for ent in entities:
+            upsert_entity(
+                entity_id=ent["id"],
+                name=ent["name"],
+                entity_type=ent["type"],
+                source_doc_id=doc_id,
+                source_row=ent.get("source_row"),
+                properties=ent.get("properties", {}),
+            )
+
+        # Upsert relationships
+        for rel in relations:
+            upsert_relationship(
+                from_entity_id=rel["from_id"],
+                to_entity_id=rel["to_id"],
+                rel_type=rel.get("rel_type", "RELATED_TO"),
+                evidence=rel.get("evidence", ""),
+                confidence=float(rel.get("confidence", 1.0)),
+            )
+
+        # Also sync DB schema tables/columns into graph
+        try:
+            from sqlalchemy import inspect as sa_inspect
+            inspector = sa_inspect(get_engine_for_db(db_name))
+            tables_info = []
+            for tbl in inspector.get_table_names():
+                columns = [
+                    {"name": c["name"], "type": str(c.get("type", ""))}
+                    for c in inspector.get_columns(tbl)
+                ]
+                fks = [
+                    {"referred_table": fk["referred_table"]}
+                    for fk in inspector.get_foreign_keys(tbl)
+                    if fk.get("referred_table")
+                ]
+                tables_info.append({
+                    "table_name": tbl,
+                    "columns": columns,
+                    "foreign_keys": fks,
+                })
+            sync_db_schema_to_graph(db_name, tables_info)
+        except Exception as exc:
+            print(f"[GraphIntegration] Schema sync failed: {exc}")
+
+        print(
+            f"[GraphIntegration] ✅ Graph updated for '{filename}': "
+            f"{len(entities)} entities, {len(relations)} relationships."
+        )
+    except Exception as exc:
+        # Never break ingestion because of graph errors
+        print(f"[GraphIntegration] ⚠️  Non-fatal graph integration error: {exc}")
+        traceback.print_exc()
+
 

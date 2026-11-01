@@ -65,10 +65,10 @@ def sync_chroma_schema_embeddings(db_name: str):
                 store.delete(ids=[existing_ids[i]])
                 removed += 1
 
-        print(f"[Chroma Sync] ✅ schema_{db_name} → added={added}, updated={updated}, removed={removed}")
+        print(f"[Chroma Sync] [OK] schema_{db_name} -> added={added}, updated={updated}, removed={removed}")
 
     except Exception as e:
-        print(f"[Chroma Sync] ❌ Error while syncing schema for '{db_name}': {e}")
+        print(f"[Chroma Sync] [ERROR] Error while syncing schema for '{db_name}': {e}")
         traceback.print_exc()
 
     # ✅ Return the store so it can be used immediately for similarity search

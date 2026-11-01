@@ -1,50 +1,97 @@
 import streamlit as st
 import pandas as pd
-from utils.api import nl_to_sql, execute_sql  # ✅ use your unified API helpers
+from utils.api import nl_to_sql, execute_sql
+
+_FU_CSS = """
+<style>
+.fu-subheader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.fu-subheader-text {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: -0.01em;
+}
+.fu-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    background: rgba(245,158,11,0.12);
+    color: #fbbf24;
+    border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 20px;
+    padding: 2px 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.prev-result-header {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #4b5563;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+}
+</style>
+"""
 
 def followup_ui(db_selected):
     """
     Handle follow-up questions for contextual query generation.
     db_selected: dict -> {"db_name": "unox", "table_name": "movies"}
     """
+    st.markdown(_FU_CSS, unsafe_allow_html=True)
 
-    st.subheader("🔁 Follow-up Question")
+    st.markdown("""
+    <div class="fu-subheader">
+        <span style="font-size:1.3rem;">🔁</span>
+        <span class="fu-subheader-text">Follow-up Question</span>
+        <span class="fu-badge">Contextual</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # --- Initialize session state safely ---
+    # --- Initialize session state ---
     if "last_result_df" not in st.session_state:
         st.session_state.last_result_df = pd.DataFrame()
-
     if "last_sql" not in st.session_state:
         st.session_state.last_sql = ""
-
     if "last_followup_sql" not in st.session_state:
         st.session_state.last_followup_sql = ""
 
-    # --- Display previous result if available ---
+    # --- Previous result preview ---
     if not st.session_state.last_result_df.empty:
-        st.markdown("**Previous Result:**")
-        st.dataframe(st.session_state.last_result_df)
+        with st.expander("📋 Previous query result", expanded=False):
+            st.markdown('<div class="prev-result-header">Last result</div>', unsafe_allow_html=True)
+            st.dataframe(st.session_state.last_result_df.head(5), use_container_width=True, hide_index=True)
     else:
-        st.info("No previous result found. Please run a main query first.")
+        st.markdown("""
+        <div style='font-size:0.82rem; color:#374151; padding:0.6rem 0 0.8rem 0;'>
+            💡 Run a main query first, then ask follow-up questions here
+        </div>
+        """, unsafe_allow_html=True)
 
-    # --- User input for follow-up ---
-    followup = st.text_input("Ask a follow-up question related to the previous result")
+    # --- Follow-up input ---
+    followup = st.text_input(
+        "Follow-up",
+        placeholder="e.g. Now filter only North region, or show top 5…",
+        label_visibility="collapsed",
+        key="followup_input"
+    )
 
-    # --- Generate follow-up SQL ---
-    if st.button("Generate Follow-up SQL") and followup:
+    if st.button("🔁 Generate Follow-up SQL", use_container_width=True) and followup:
         if not st.session_state.last_sql:
             st.warning("Please run a main query first before asking a follow-up.")
             return
 
-        with st.spinner("Generating follow-up SQL using Gemini..."):
+        with st.spinner("Building context-aware SQL with Gemini…"):
             try:
-                # ✅ Call the same /nl2sql API but give extra context (previous query)
                 context_question = f"""
-                Previous SQL Query: {st.session_state.last_sql}
-                Follow-up Question: {followup}
-                """
-
-                # --- Use your existing API helper ---
+Previous SQL Query: {st.session_state.last_sql}
+Follow-up Question: {followup}
+"""
                 sql_result = nl_to_sql(
                     context_question,
                     db_selected["db_name"],
@@ -58,17 +105,20 @@ def followup_ui(db_selected):
                     st.error("No SQL query generated for follow-up.")
                     return
 
-                st.success("✅ Generated SQL for follow-up:")
+                st.success("✅ Follow-up SQL generated")
                 st.code(followup_sql, language="sql")
 
-                # --- (Optional) Run the follow-up query immediately ---
-                with st.spinner("Running follow-up query..."):
+                with st.spinner("Running follow-up query…"):
                     result = execute_sql(followup_sql, db_selected["db_name"])
 
                 if result.get("status") == "success":
                     df = pd.DataFrame(result["rows"])
                     st.session_state.last_result_df = df
-                    st.dataframe(df)
+                    st.markdown(
+                        f"<div style='font-size:0.78rem; color:#34d399; margin-bottom:0.4rem;'>✅ {len(df):,} rows</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.dataframe(df, use_container_width=True, hide_index=True)
                 else:
                     st.error(result.get("detail", result.get("error", "Query failed.")))
 

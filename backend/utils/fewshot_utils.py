@@ -133,12 +133,12 @@ def build_fewshot_example_store():
             docs = [f"Q: {ex['input']}\nSQL: {ex['sql']}" for ex in FEWSHOT_EXAMPLES]
             metadatas = [{"id": i} for i in range(len(docs))]
             store.add_texts(docs, metadatas=metadatas)
-            print(f"[FewShot] ✅ Populated {len(docs)} examples into Chroma at {persist_dir}")
+            print(f"[FewShot] [OK] Populated {len(docs)} examples into Chroma at {persist_dir}")
         else:
-            print(f"[FewShot] ⚙️ Existing examples already found at {persist_dir}")
+            print(f"[FewShot] [INFO] Existing examples already found at {persist_dir}")
 
     except Exception as e:
-        print(f"[FewShot] ❌ Error building example store: {e}")
+        print(f"[FewShot] [ERROR] Error building example store: {e}")
         traceback.print_exc()
 
     return store

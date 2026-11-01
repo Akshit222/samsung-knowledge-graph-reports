@@ -88,9 +88,41 @@ def _get_relevant_examples(example_store: Chroma, question: str, k: int = 3):
         except Exception:
             return "No few-shot examples available."
 
+def _get_graph_context(question: str, db_name: str) -> str:
+    """
+    Attempt to enrich the SQL prompt with knowledge-graph context.
+    Returns a formatted string (may be empty if graph is unavailable).
+    """
+    try:
+        from utils.graph_service import is_available, semantic_search_entities
+        from utils.entity_extractor import extract_question_entities
+        if not is_available():
+            return ""
+        entity_names = extract_question_entities(question)
+        if not entity_names:
+            return ""
+        graph_ctx = semantic_search_entities(entity_names, db_name=db_name)
+        nodes = graph_ctx.get("nodes", [])
+        edges = graph_ctx.get("edges", [])
+        if not nodes:
+            return ""
+
+        lines = ["Knowledge Graph context (use as hints only, do NOT invent tables):"]
+        for n in nodes[:15]:
+            label = n.get("name") or n.get("id", "?")
+            ntype = (n.get("labels") or [n.get("type", "Entity")])[0]
+            lines.append(f"  • [{ntype}] {label}")
+        for e in edges[:10]:
+            lines.append(f"  • {e.get('from','?')} --[{e.get('type','?')}]--> {e.get('to','?')}")
+        return "\n".join(lines)
+    except Exception as exc:
+        print(f"[GraphCtx] Could not retrieve graph context: {exc}")
+        return ""
+
+
 def generate_sql_from_nl(question: str, db_name: str, table_name: str = None) -> dict:
     """
-    Few-shot + Chroma-enhanced NL → SQL generator.
+    Few-shot + Chroma-enhanced NL → SQL generator with optional graph context.
     Dynamically retrieves few-shot examples & schema embeddings using Chroma.
     Returns: {status, db_name, tables_used, question, sql_query} or error dict.
     """
@@ -138,6 +170,9 @@ def generate_sql_from_nl(question: str, db_name: str, table_name: str = None) ->
             example_store = build_fewshot_example_store()
             fewshot_str = _get_relevant_examples(example_store, question, k=3)
 
+        # --- Knowledge graph context (optional enrichment) ---
+        graph_context_str = _get_graph_context(question, db_name)
+
         # --- Debug info (optional, safe to keep) ---
         try:
             print("\n[DEBUG] --- Chroma schema collection snapshot ---")
@@ -152,12 +187,16 @@ def generate_sql_from_nl(question: str, db_name: str, table_name: str = None) ->
             print("[DEBUG] (info) Could not dump Chroma internals for debug:", e)
 
         # --- Prompt building (LLM input) ---
+        graph_section = (
+            f"\nSemantic Knowledge Graph hints:\n{graph_context_str}\n"
+            if graph_context_str else ""
+        )
         prompt = f"""
 You are a MySQL expert. The user is asking about the database '{db_name}'.
 
 Relevant tables & enriched columns:
 {schema_str}
-
+{graph_section}
 Use JOINs if multiple tables are relevant.
 
 Few-shot examples (use these as stylistic guides):
@@ -186,6 +225,8 @@ Instructions:
         print(f"[NL2SQL] Relevant Tables: {relevant_tables}")
         print(f"================ Schema sent :\n {schema_str}")
         print(f"================ Few-shot examples sent :\n {fewshot_str}")
+        if graph_context_str:
+            print(f"================ Graph context :\n {graph_context_str}")
         print(f"[NL2SQL] Question: {question}")
         print(f"[NL2SQL] SQL (escaped): {sql_query}")
         print("=======================\n")
@@ -197,9 +238,12 @@ Instructions:
             "question": question,
             "schema_str": schema_str,
             "fewshot_str": fewshot_str,
+            "graph_context": graph_context_str,
             "sql_query": sql_query
         }
 
     except Exception as e:
         traceback.print_exc()
         return {"status": "error", "error": str(e), "question": question}
+
+
